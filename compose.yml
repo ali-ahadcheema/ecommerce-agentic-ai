@@ -1,0 +1,39 @@
+services:
+ frontend:
+  build: ./user-commerce
+  ports:
+   - "5173:5173"
+  depends_on:
+    - backend
+
+ backend:
+  build: ./2nd-ecomm
+  ports:
+   - "3000:3000"
+  env_file:
+   - ./2nd-ecomm/.env
+  depends_on:
+   redis:
+    condition: service_healthy
+
+ worker:
+   build: ./2nd-ecomm
+   command: ["node","worker.js"]
+   env_file:
+    - ./2nd-ecomm/.env
+   depends_on:
+    redis:
+     condition: service_healthy
+  
+ redis:
+  image: redis:alpine
+  volumes:
+   - redisdata:/data
+  healthcheck:
+   test: ["CMD","redis-cli","ping"]
+   interval: 5s
+   timeout: 3s
+   retries: 5
+
+volumes:
+ redisdata:
