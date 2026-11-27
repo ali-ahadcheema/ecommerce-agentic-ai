@@ -4,8 +4,9 @@ import mongoose from "mongoose";
 const productschema = new mongoose.Schema({
     name: String,
     type: String,
-    quantity: Number,
+    stock: Number,
     price: Number,
+    description: String,
     image: String
 
 }, { timestamps: true })

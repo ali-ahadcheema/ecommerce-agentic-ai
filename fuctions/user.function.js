@@ -161,7 +161,7 @@ export const logout = async (req, res) => {
 }
 export const add = async (req, res) => {
     try {
-        const { name, type, quantity, price } = req.body
+        const { name, type, stock, description, price } = req.body
         if (!name && price) {
             console.log("name and price required")
         }
@@ -170,7 +170,7 @@ export const add = async (req, res) => {
             return res.json("please add picture")
         }
 
-        const Product = new product({ name, type, quantity, price, image: image })
+        const Product = new product({ name, type, stock, description, price, image: image })
 
         await Product.save()
         res.status(201).json(Product)

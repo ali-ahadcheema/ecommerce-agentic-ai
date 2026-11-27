@@ -9,7 +9,9 @@ import product from "./mongo/product.mongo.js"
 import redis from "./redis.js"
 import passport from "passport"
 import { Strategy as GoogleStrategy } from "passport-google-oauth20"
+import dns from "dns"
 
+dns.setServers(["1.1.1.1", "8.8.8.8"])
 
 const app = express()
 
