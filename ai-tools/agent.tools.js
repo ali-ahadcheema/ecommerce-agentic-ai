@@ -2,12 +2,15 @@ import { tool } from "langchain"
 import Order from "../mongo/order.js"
 import z from "zod"
 import dotenv from "dotenv"
-import jwt from "jsonwebtoken"
+import redis from "../redis.js"
 import Cart from "../mongo/cart.monog.js"
 import product from "../mongo/product.mongo.js"
 import mongoose from "mongoose"
 import User from "../mongo/user.mongo.js"
 import Cupon from "../mongo/cupon.monog.js"
+import crypto from "crypto"
+
+
 
 dotenv.config()
 
@@ -69,10 +72,7 @@ export const productstatus = (userid) =>
             if (!mongoose.Types.ObjectId.isValid(orderid)) {
                 return "Invalid order ID";
             }
-            const find = await Order.findOne({
-                _id: orderid,
-                user: userid
-            })
+            const find = await Order.findById(orderid)
 
             console.log("ORDER:", find)
 
@@ -82,7 +82,7 @@ export const productstatus = (userid) =>
 
             console.log("STATUS:", find.status)
 
-            return find.status
+            return JSON.stringify(find.status)
         },
         {
             name: "productstatus",
@@ -215,31 +215,28 @@ export const cartorder = (userid) => tool(
 )
 
 export const removecart = (userid) => tool(
-    async ({ productname }) => {
+    async ({ productId }) => {
 
         const finduser = await Cart.findOne({ user: userid })
         if (!finduser) {
             return ("your cart is empty")
         }
-        const findproduct = await product.findOne({ name: productname })
-        if (!findproduct) {
-            return ("this product is not find")
-        }
 
-        const index = finduser.items.findIndex((item) => item.product.toString() === findproduct._id.toString())
+        const id = crypto.randomUUID()
 
-        if (index == -1) {
-            return ("this product is not in your cart")
-        }
-        finduser.items.splice(index, 1)
-        finduser.save()
-        return JSON.stringify(finduser)
+        await redis.set(`pending:${id}`, JSON.stringify({ userid, action: "delcart", args: { productId } }), "EX", 60)
+
+        return JSON.stringify({
+            needsConfirmation: true,
+            confirmId: id,
+            message: "confirm for delete this product?",
+        })
     },
     {
         name: "delcart",
         description: "when user say delete this product from my cart and he give product name or product id ",
         schema: z.object({
-            productname: z.string()
+            productId: z.string()
         })
     }
 )

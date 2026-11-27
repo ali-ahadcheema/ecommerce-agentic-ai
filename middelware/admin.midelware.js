@@ -12,7 +12,7 @@ export const admin = async (req, res, next) => {
             return res.json("token is not availble")
         }
 
-        const decode = jwt.verify(token, process.env.secret)
+        const decode = jwt.verify(token, process.env.JWT_SECRET)
         if (!decode) {
             return res.json("user is not authorize")
         }

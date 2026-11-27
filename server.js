@@ -7,9 +7,12 @@ import cookieParser from "cookie-parser"
 import { paymenthook } from "./fuctions/user.function.js"
 import product from "./mongo/product.mongo.js"
 import redis from "./redis.js"
+import passport from "passport"
+import { Strategy as GoogleStrategy } from "passport-google-oauth20"
 
 
 const app = express()
+
 
 app.post("/paynow", express.raw({ type: "application/json" }), paymenthook)
 
@@ -18,6 +21,22 @@ app.use(cors({
     origin: "http://localhost:5173",
     credentials: true
 }))
+
+
+app.use(passport.initialize())
+
+
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK,
+}, (accessToken, refreshToken, profile, done) => {
+    return done(null, profile);
+}))
+
+
+
 
 app.use(express.json())
 
@@ -35,3 +54,4 @@ mongoose.connect(process.env.mongo, { maxPoolSize: 10 })
     })
     .catch((error) => console.log(error))
 await redis
+

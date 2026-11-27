@@ -11,6 +11,8 @@ import { createAgent, tool } from "langchain"
 import { ChatGroq } from "@langchain/groq"
 import { productstatus, searchproduct, productlist, shipai, viewcart, cartorder, removecart, updatecart } from "../ai-tools/agent.tools.js";
 import redis from "../redis.js";
+import { ParseStatus } from "zod/v3";
+import { $ZodNull } from "zod/v4/core";
 
 
 
@@ -28,7 +30,7 @@ export const sign = async (req, res) => {
         const user = new User({ name, email, password: bcryptpassword })
         const expiretime = 30 * 24 * 60 * 60 * 1000
 
-        const token = jwt.sign({ id: user.id }, process.env.secret, { expiresIn: "30d" })
+        const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "30d" })
         res.cookie("token", token, {
             httpOnly: true,
             secure: false,
@@ -55,6 +57,41 @@ export const sign = async (req, res) => {
 
 }
 
+export const googlecall = async (req, res) => {
+    try {
+        const profile = req.user
+        const email = profile.emails?.[0]?.value
+
+        if (!email) {
+            res.json("email  not find")
+        }
+        const name = profile.displyName
+        let user = await User.findOne({ email })
+        if (!user) {
+            user = new User({
+                name,
+                email,
+                googleid: profile.id
+            })
+
+            await user.save()
+        }
+        console.log("google user id", user._id)
+        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "30d" })
+
+        res.cookie("token", token, {
+            htppOnly: true,
+            Secure: true,
+            sameSite: "lax"
+        })
+        res.redirect("http://localhost:5173/");
+    }
+    catch (error) {
+        console.log(error.message)
+        res.json(error.message)
+    }
+}
+
 export const login = async (req, res) => {
     const { email, password } = req.body
 
@@ -72,7 +109,7 @@ export const login = async (req, res) => {
     }
     const expiretime = 30 * 24 * 60 * 60 * 1000
 
-    const token = jwt.sign({ id: userfind._id }, process.env.secret, { expiresIn: "30d" })
+    const token = jwt.sign({ id: userfind._id }, process.env.JWT_SECRET, { expiresIn: "30d" })
 
     res.cookie("token", token, {
         httpOnly: true,
@@ -96,7 +133,7 @@ export const getme = async (req, res) => {
         if (!token) {
             return res.status(403).json("not logged in")
         }
-        const decoded = jwt.verify(token, process.env.secret)
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
         const user = await User.findById(decoded.id).select("-password")
         if (!user) {
             return res.status(403).json("user is not authrize")
@@ -187,7 +224,8 @@ export const addcart = async (req, res) => {
                 product: productId,
                 name: findproduct.name,
                 quantity,
-                price: findproduct.price
+                price: findproduct.price,
+                image: findproduct.image
             })
         }
 
@@ -207,7 +245,7 @@ export const editcart = async (req, res) => {
             return res.json("user is not authorize")
         }
 
-        const decode = jwt.verify(token, process.env.secret)
+        const decode = jwt.verify(token, process.env.JWT_SECRET)
         if (!decode) {
             return res.json("user is not authorizr")
         }
@@ -231,7 +269,7 @@ export const allcart = async (req, res) => {
             return res.json("user have not token")
         }
 
-        const decoded = jwt.verify(token, process.env.secret)
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
         if (!decoded) {
             return res.json("user is unathorize")
         }
@@ -252,7 +290,7 @@ export const delcart = async (req, res) => {
         if (!token) {
             return res.json("token not avialble")
         }
-        const decode = jwt.verify(token, process.env.secret)
+        const decode = jwt.verify(token, process.env.JWT_SECRET)
         if (!decode) {
             return res.json("token is not authorize")
         }
@@ -269,8 +307,9 @@ export const delcart = async (req, res) => {
 }
 export const addorder = async (req, res) => {
     try {
-        const { userId, shipping, productId, quantity } = req.body
+        const { shipping, productId, quantity } = req.body
 
+        const token = req.cookies.token
         let orderitems = []
         let totalamount = 0
 
@@ -281,13 +320,15 @@ export const addorder = async (req, res) => {
             }
             orderitems.push({
                 product: productId,
+                name: findproduct.name,
                 quantity: quantity || 1,
-                price: findproduct.price
+                price: findproduct.price,
+                image: findproduct.image
             })
             totalamount = findproduct.price * (quantity || 1)
         }
         else {
-            const cartuser = await Cart.findOne({ user: userId })
+            const cartuser = await Cart.findOne({ user: token.id })
             if (!cartuser || cartuser.items.length === 0) {
                 return res.status(400).json({ message: "cart is empty" })
             }
@@ -301,7 +342,7 @@ export const addorder = async (req, res) => {
         }
 
         const neworder = new Order({
-            user: userId,
+            user: token.id,
             items: orderitems,
             totalamount,
             shipping
@@ -377,7 +418,7 @@ export const paymenthook = async (req, res) => {
 
 export const allproducts = async (req, res) => {
     try {
-        const products = await product.find().limit(20)
+        const products = await product.find({}).limit(20)
         if (!products) {
             res.status(400).json("products not find")
         }
@@ -402,7 +443,7 @@ export const ai = async (req, res) => {
 
         const decode = jwt.verify(
             token,
-            process.env.secret
+            process.env.JWT_SECRET
         );
 
         const userid = decode.id;
@@ -469,6 +510,7 @@ IMPORTANT RULES:
 
         const finalmessage = response.messages[response.messages.length - 1].content
         let image = null
+        let pending = null
         for (const check of response.messages) {
             if (check.role === "tool" || check._getType() === "tool") {
                 try {
@@ -482,15 +524,20 @@ IMPORTANT RULES:
                         break
                     }
 
+                    if (parsed?.needsConfirmation && !pending) {
+                        pending = { confirmId: parsed.confirmId, message: parsed.message }
+                    }
+
                 }
                 catch (error) {
                     return res.status(401).json({ message: error.message })
                 }
             }
         }
-        res.status(200).json({ text: finalmessage, image: image })
+        res.status(200).json({ text: finalmessage, image: image, confirm: pending ? { id: pending.confirmId, message: pending.message } : null, })
     }
     catch (error) {
+        console.log(error.message)
         res.status(500).json({ message: error.message })
     }
 }
@@ -573,6 +620,70 @@ export const catogry = async (req, res) => {
     }
     catch (error) {
         console.log(error)
+        res.status(500).json(error.message)
+    }
+}
+
+export const newarrival = async (req, res) => {
+    try {
+        const products = await product.find({}).sort({ createdAt: -1 })
+        if (!products) {
+            res.json("products not find in new arrivals")
+        }
+        res.json(products)
+    }
+    catch (error) {
+        res.status(500).json(error.message)
+    }
+}
+
+export const skip = async (req, res) => {
+    try {
+        const { number } = req.query
+
+        let check = (number - 1) * 10
+
+        const products = await product.find({}).skip(check).limit(10)
+        if (!products) {
+            res.json("products end not find")
+        }
+        res.status(200).json(products)
+    }
+    catch (error) {
+        console.log(error.message)
+        res.status(500).json(error.message)
+    }
+}
+
+
+export const productdtail = async (req, res) => {
+    try {
+        const find = await product.findById(req.params.id)
+        if (!find) return res.status(404).json({ message: "Not found" });
+        res.json(find);
+    }
+    catch (error) {
+        res.json(error.message)
+    }
+}
+
+export const myorders = async (req, res) => {
+    try {
+        const token = req.cookies.token
+        if (!token) {
+            res.json("token no find of user")
+        }
+
+        const decod = jwt.verify(token, process.env.JWT_SECRET)
+        if (!decod) {
+            res.json("user not verify")
+        }
+        console.log(decod)
+
+        const orders = await Order.find({ user: decod.id })
+        res.status(200).json(orders)
+    }
+    catch (error) {
         res.status(500).json(error.message)
     }
 }

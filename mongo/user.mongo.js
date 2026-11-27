@@ -8,7 +8,13 @@ const userschema = new mongoose.Schema({
         unique: true,
         required: true
     },
-    password: String,
+    password: {
+        type: String,
+        required: function () {
+            return !this.googleid
+        }
+    },
+    googleid: String,
     age: Number,
     usertype: {
         type: String,

@@ -1,5 +1,6 @@
 import express from "express"
 import mongoose, { Types } from "mongoose"
+import { string } from "zod"
 
 
 const orderschema = mongoose.Schema({
@@ -13,6 +14,7 @@ const orderschema = mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: "product"
         },
+        name: string,
         quantity: {
             type: Number,
             required: true
@@ -20,7 +22,8 @@ const orderschema = mongoose.Schema({
         price: {
             type: Number,
             required: true
-        }
+        },
+        image: String
     }],
     totalamount: {
         type: Number,
